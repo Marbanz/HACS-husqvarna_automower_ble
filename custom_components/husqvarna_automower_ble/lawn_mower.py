@@ -5,11 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from bleak_retry_connector import get_device
 from husqvarna_automower_ble.protocol import MowerActivity, MowerState
-from husqvarna_automower_ble.protocol import ResponseResult
 
-from homeassistant.components import bluetooth
 from homeassistant.components.lawn_mower import (
     LawnMowerActivity,
     LawnMowerEntity,
@@ -145,89 +142,87 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
         """Start mowing."""
         _LOGGER.debug("Starting mower")
 
-        if not await self._ensure_connected():
-            return
+        try:
+            await self.coordinator.async_execute_command(
+                self.coordinator.mower.mower_resume
+            )
+            if self._attr_activity == LawnMowerActivity.DOCKED:
+                await self.coordinator.async_execute_command(
+                    self.coordinator.mower.mower_override
+                )
 
-        await self.coordinator.mower.mower_resume()
-        if self._attr_activity == LawnMowerActivity.DOCKED:
-            await self.coordinator.mower.mower_override()
-        await asyncio.sleep(1)
-        await self.coordinator.async_request_refresh()
+            await asyncio.sleep(1)
+            await self.coordinator.async_request_refresh()
 
-        self._attr_activity = self._get_activity()
-        self.async_write_ha_state()
+            self._attr_activity = self._get_activity()
+            self.async_write_ha_state()
+        except Exception as ex:
+            _LOGGER.error("Failed to start mowing: %s", ex)
 
     async def async_dock(self) -> None:
         """Start docking."""
         _LOGGER.debug("Docking mower")
 
-        if not await self._ensure_connected():
-            return
+        try:
+            await self.coordinator.async_execute_command(
+                self.coordinator.mower.mower_park
+            )
 
-        await self.coordinator.mower.mower_park()
-        await asyncio.sleep(1)
-        await self.coordinator.async_request_refresh()
+            await asyncio.sleep(1)
+            await self.coordinator.async_request_refresh()
 
-        self._attr_activity = self._get_activity()
-        self.async_write_ha_state()
+            self._attr_activity = self._get_activity()
+            self.async_write_ha_state()
+        except Exception as ex:
+            _LOGGER.error("Failed to dock mower: %s", ex)
 
     async def async_pause(self) -> None:
         """Pause mower."""
         _LOGGER.debug("Pausing mower")
 
-        if not await self._ensure_connected():
-            return
+        try:
+            await self.coordinator.async_execute_command(
+                self.coordinator.mower.mower_pause
+            )
 
-        await self.coordinator.mower.mower_pause()
-        await asyncio.sleep(1)
-        await self.coordinator.async_request_refresh()
+            await asyncio.sleep(1)
+            await self.coordinator.async_request_refresh()
 
-        self._attr_activity = self._get_activity()
-        self.async_write_ha_state()
+            self._attr_activity = self._get_activity()
+            self.async_write_ha_state()
+        except Exception as ex:
+            _LOGGER.error("Failed to pause mower: %s", ex)
 
     async def async_park_indefinitely(self) -> None:
         """Park mower indefinitely."""
         _LOGGER.debug("Parking mower indefinitely")
 
-        if not await self._ensure_connected():
-            return
+        try:
+            await self.coordinator.async_execute_command(
+                self.coordinator.mower.mower_park_indefinitely
+            )
 
-        await self.coordinator.mower.mower_park_indefinitely()
-        await asyncio.sleep(1)
-        await self.coordinator.async_request_refresh()
+            await asyncio.sleep(1)
+            await self.coordinator.async_request_refresh()
 
-        self._attr_activity = self._get_activity()
-        self.async_write_ha_state()
+            self._attr_activity = self._get_activity()
+            self.async_write_ha_state()
+        except Exception as ex:
+            _LOGGER.error("Failed to park mower indefinitely: %s", ex)
 
     async def async_resume_schedule(self) -> None:
         """Resume mower schedule."""
         _LOGGER.debug("Resuming mower schedule")
 
-        if not await self._ensure_connected():
-            return
+        try:
+            await self.coordinator.async_execute_command(
+                self.coordinator.mower.mower_auto
+            )
 
-        await self.coordinator.mower.mower_auto()
-        await asyncio.sleep(1)
-        await self.coordinator.async_request_refresh()
+            await asyncio.sleep(1)
+            await self.coordinator.async_request_refresh()
 
-        self._attr_activity = self._get_activity()
-        self.async_write_ha_state()
-
-    async def _ensure_connected(self) -> bool:
-        """Ensure the mower is connected."""
-        if self.coordinator.mower.is_connected():
-            return True
-
-        _LOGGER.debug("Attempting to connect to mower")
-        device = bluetooth.async_ble_device_from_address(
-            self.coordinator.hass, self.coordinator.address, connectable=True
-        ) or await get_device(self.coordinator.address)
-        if not device:
-            _LOGGER.error("Failed to find BLE device for mower")
-            return False
-
-        if await self.coordinator.mower.connect(device) is not ResponseResult.OK:
-            _LOGGER.error("Failed to connect to mower")
-            return False
-
-        return True
+            self._attr_activity = self._get_activity()
+            self.async_write_ha_state()
+        except Exception as ex:
+            _LOGGER.error("Failed to resume mower schedule: %s", ex)

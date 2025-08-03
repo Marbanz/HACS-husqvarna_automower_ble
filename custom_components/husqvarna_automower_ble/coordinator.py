@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 import logging
 from typing import Any
@@ -52,13 +53,22 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.channel_id = channel_id
         self.serial = serial
         self._last_successful_update: datetime | None = None
+        self._connection_lock = asyncio.Lock()
 
     async def async_shutdown(self) -> None:
         """Shutdown coordinator and any connection."""
         _LOGGER.debug("Shutting down coordinator")
+
+        # Acquire the lock to ensure no operations are in progress during shutdown
+        async with self._connection_lock:
+            if self.mower.is_connected():
+                try:
+                    await self.mower.disconnect()
+                    _LOGGER.debug("Disconnected mower during shutdown")
+                except Exception as ex:
+                    _LOGGER.warning("Error disconnecting during shutdown: %s", ex)
+
         await super().async_shutdown()
-        if self.mower.is_connected():
-            await self.mower.disconnect()
 
     async def _async_find_device(self) -> None:
         """Attempt to reconnect to the device."""
@@ -85,38 +95,67 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         data: dict[str, Any] = {}
 
-        try:
-            if not self.mower.is_connected():
-                await self._async_find_device()
+        async with self._connection_lock:
+            try:
+                if not self.mower.is_connected():
+                    await self._async_find_device()
 
-            # Fetch data from the mower
-            data["battery_level"] = await self.mower.battery_level()
-            data["is_charging"] = await self.mower.is_charging()
-            data["mode"] = await self.mower.mower_mode()
-            data["state"] = await self.mower.mower_state()
-            data["activity"] = await self.mower.mower_activity()
-            data["error"] = await self.mower.mower_error()
-            data["next_start_time"] = await self.mower.mower_next_start_time()
+                # Fetch data from the mower
+                data["battery_level"] = await self.mower.battery_level()
+                data["is_charging"] = await self.mower.is_charging()
+                data["mode"] = await self.mower.mower_mode()
+                data["state"] = await self.mower.mower_state()
+                data["activity"] = await self.mower.mower_activity()
+                data["error"] = await self.mower.mower_error()
+                data["next_start_time"] = await self.mower.mower_next_start_time()
 
-            # Fetch mower statistics
-            stats = await self.mower.mower_statistics()
-            data["statistics"] = stats
+                # Fetch mower statistics
+                stats = await self.mower.mower_statistics()
+                data["statistics"] = stats
 
-            self._last_successful_update = datetime.now()
+                self._last_successful_update = datetime.now()
 
-            _LOGGER.debug("Successfully polled data: %s", data)
+                _LOGGER.debug("Successfully polled data: %s", data)
 
-        except (TimeoutError, BleakError) as ex:
-            _LOGGER.error("Error fetching data from device: %s", ex)
-            self.async_update_listeners()
-            raise UpdateFailed("Error fetching data from device") from ex
-        except Exception as ex:
-            _LOGGER.exception("Unexpected error while fetching data: %s", ex)
-            self.async_update_listeners()
-            raise UpdateFailed("Unexpected error fetching data") from ex
-        finally:
-            # Ensure the mower is disconnected after polling
-            if self.mower.is_connected():
-                await self.mower.disconnect()
+            except (TimeoutError, BleakError) as ex:
+                _LOGGER.error("Error fetching data from device: %s", ex)
+                self.async_update_listeners()
+                raise UpdateFailed("Error fetching data from device") from ex
+            except Exception as ex:
+                _LOGGER.exception("Unexpected error while fetching data: %s", ex)
+                self.async_update_listeners()
+                raise UpdateFailed("Unexpected error fetching data") from ex
+            finally:
+                # Ensure the mower is disconnected after polling
+                if self.mower.is_connected():
+                    await self.mower.disconnect()
 
         return data
+
+    async def async_execute_command(self, command_func, *args, **kwargs) -> Any:
+        """Execute a command on the mower with connection locking."""
+        _LOGGER.debug("Executing command: %s", command_func.__name__)
+
+        async with self._connection_lock:
+            try:
+                if not self.mower.is_connected():
+                    await self._async_find_device()
+
+                # Execute the command
+                result = await command_func(*args, **kwargs)
+
+                _LOGGER.debug("Command %s executed successfully", command_func.__name__)
+                return result
+
+            except (TimeoutError, BleakError) as ex:
+                _LOGGER.error(
+                    "Error executing command %s: %s", command_func.__name__, ex
+                )
+                raise
+            except Exception as ex:
+                _LOGGER.exception(
+                    "Unexpected error executing command %s: %s",
+                    command_func.__name__,
+                    ex,
+                )
+                raise
