@@ -1,27 +1,53 @@
 {
   "config": {
+    "flow_title": "{name} ({address})",
     "step": {
       "user": {
-        "title": "Automower BLE Configuration",
-        "description": "Enter the Bluetooth MAC address and PIN code of your mower.",
         "data": {
-          "address": "The Bluetooth MAC address of your mower",
-          "pin": "(optional) PIN code"
+          "address": "Device BLE address",
+          "pin": "Mower PIN"
+        },
+        "data_description": {
+          "pin": "The PIN used to secure the mower"
+        }
+      },
+      "bluetooth_confirm": {
+        "description": "Do you want to set up {name}?\nMake sure the mower is in pairing mode.",
+        "data": {
+          "pin": "Mower PIN"
+        },
+        "data_description": {
+          "pin": "The PIN used to secure the mower"
+        }
+      },
+      "reauth_confirm": {
+        "description": "Please confirm the PIN for {name}.",
+        "data": {
+          "pin": "Mower PIN"
+        },
+        "data_description": {
+          "pin": "The PIN used to secure the mower"
         }
       }
     },
-    "error": {
-      "invalid_address_format": "Invalid Bluetooth MAC address entered",
-      "invalid_pin_format": "Invalid PIN code entered",
-      "already_configured": "Device is already configured",
-      "device_not_found": "Device not found. Make sure the mower is powered on and within range",
-      "cannot_connect": "Cannot connect to the mower via Bluetooth. Make sure the mower is in pairing mode",
-      "invalid_auth": "Unable to pair with device, ensure the PIN is correct and the mower is in pairing mode",
-      "exception": "An unexpected error occurred with the BLE component"
-    },
     "abort": {
-      "already_configured": "This device is already configured",
-      "no_devices_found": "No supported devices found"
+      "already_configured": "Device is already configured",
+      "no_devices_found": "Ensure the mower is in pairing mode and try again. It can take a few attempts.",
+      "cannot_connect": "Failed to connect",
+      "reauth_successful": "Re-authentication was successful",
+      "not_allowed": "Unable to read data from the mower, this usually means it is not paired",
+      "unknown": "Unexpected error"
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Unable to pair with device, ensure the PIN is correct and the mower is in pairing mode",
+      "invalid_address_format": "Invalid Bluetooth MAC address entered",
+      "invalid_pin": "The PIN must be a number"
+    }
+  },
+  "exceptions": {
+    "pin_required": {
+      "message": "PIN is required for {domain_name}"
     }
   },
   "services": {

@@ -13,88 +13,75 @@ from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
-from .const import DOMAIN, CONF_ADDRESS, CONF_PIN, CONF_CLIENT_ID, STARTUP_MESSAGE
+from .const import DOMAIN, CONF_ADDRESS, CONF_CLIENT_ID, CONF_PIN
 from .coordinator import HusqvarnaCoordinator
 
-_LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [
+type HusqvarnaConfigEntry = ConfigEntry[HusqvarnaCoordinator]
+
+PLATFORMS = [
     Platform.LAWN_MOWER,
     Platform.SENSOR,
 ]
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: HusqvarnaConfigEntry) -> bool:
     """Set up Husqvarna Autoconnect Bluetooth from a config entry."""
-    address: str = entry.data[CONF_ADDRESS]
-    pin: int | None = entry.data.get(CONF_PIN)
-    channel_id: int = entry.data[CONF_CLIENT_ID]
+    if CONF_PIN not in entry.data:
+        raise ConfigEntryAuthFailed(
+            translation_domain=DOMAIN,
+            translation_key="pin_required",
+            translation_placeholders={"domain_name": "Husqvarna Automower BLE"},
+        )
 
-    _LOGGER.info(STARTUP_MESSAGE)
+    address = entry.data[CONF_ADDRESS]
+    pin = int(entry.data[CONF_PIN])
+    channel_id = entry.data[CONF_CLIENT_ID]
 
     mower = Mower(channel_id, address, pin)
 
     await close_stale_connections_by_address(address)
 
-    _LOGGER.debug(
-        "Connecting to %s with channel ID %s and pin %s", address, channel_id, pin
-    )
-
+    LOGGER.debug("connecting to %s with channel ID %s", address, str(channel_id))
     try:
-        # Attempt to find and connect to the device
         device = bluetooth.async_ble_device_from_address(
             hass, address, connectable=True
         ) or await get_device(address)
-
-        if not device:
-            _LOGGER.error("No BLE device found at %s", address)
-            raise ConfigEntryNotReady(f"No BLE device found at {address}")
-
         response_result = await mower.connect(device)
+        if response_result == ResponseResult.INVALID_PIN:
+            raise ConfigEntryAuthFailed(
+                f"Unable to connect to device {address} due to wrong PIN"
+            )
         if response_result != ResponseResult.OK:
             raise ConfigEntryNotReady(
                 f"Unable to connect to device {address}, mower returned {response_result}"
             )
-    except (BleakError, TimeoutError) as ex:
-        _LOGGER.exception("Error connecting to device at %s: %s", address, ex)
-        raise ConfigEntryNotReady(f"Connection error: {ex}") from ex
+    except (TimeoutError, BleakError) as exception:
+        raise ConfigEntryNotReady(
+            f"Unable to connect to device {address} due to {exception}"
+        ) from exception
 
-    _LOGGER.debug("Connected and paired successfully")
+    LOGGER.debug("connected and paired")
 
-    # Retrieve mower details
-    try:
-        manufacturer = await mower.get_manufacturer()
-        model = await mower.get_model()
-        serial = await mower.get_serial_number()
-        _LOGGER.info("Connected to Automower: %s (Serial: %s)", model, serial)
-    except Exception as ex:
-        _LOGGER.exception("Failed to retrieve mower details: %s", ex)
-        raise ConfigEntryNotReady(f"Failed to retrieve mower details: {ex}") from ex
+    model = await mower.get_model()
+    LOGGER.debug("Connected to Automower: %s", model)
 
-    # Set up the coordinator
-    coordinator = HusqvarnaCoordinator(
-        hass, mower, address, manufacturer, model, channel_id, serial
-    )
+    coordinator = HusqvarnaCoordinator(hass, entry, mower, address, channel_id, model)
 
-    try:
-        await coordinator.async_config_entry_first_refresh()
-    except Exception as ex:
-        _LOGGER.exception("Failed to refresh coordinator data: %s", ex)
-        raise ConfigEntryNotReady(f"Failed to initialize coordinator: {ex}") from ex
-
-    # Store the coordinator and forward entry setups
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+    await coordinator.async_config_entry_first_refresh()
+    entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: HusqvarnaConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        coordinator: HusqvarnaCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        coordinator: HusqvarnaCoordinator = entry.runtime_data
         await coordinator.async_shutdown()
 
     return unload_ok

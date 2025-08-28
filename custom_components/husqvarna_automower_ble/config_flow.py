@@ -3,41 +3,31 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 import random
 import re
 from typing import Any
 
-from bleak_retry_connector import get_device
 from husqvarna_automower_ble.mower import Mower
 from husqvarna_automower_ble.protocol import ResponseResult
-from bleak.exc import BleakError
+from bleak import BleakError
+from bleak_retry_connector import get_device
 import voluptuous as vol
 
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import BluetoothServiceInfo
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import SOURCE_BLUETOOTH, ConfigFlow, ConfigFlowResult
 
-from .const import DOMAIN, CONF_ADDRESS, CONF_PIN, CONF_CLIENT_ID
+from .const import DOMAIN, CONF_ADDRESS, CONF_CLIENT_ID, CONF_PIN
 
-_LOGGER = logging.getLogger(__name__)
-
-
-def _is_valid_bluetooth_address(address: str) -> bool:
-    """Validate if the provided string is a valid Bluetooth address format."""
-    if not address:
-        return False
-
-    # Bluetooth addresses are 6 groups of 2 hex digits separated by colons
-    # Format: XX:XX:XX:XX:XX:XX (case insensitive)
-    bluetooth_pattern = r"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"
-    return bool(re.match(bluetooth_pattern, address))
+LOGGER = logging.getLogger(__name__)
 
 
-def _is_supported(discovery_info: BluetoothServiceInfo) -> bool:
-    """Check if the discovered device is supported."""
+def _is_supported(discovery_info: BluetoothServiceInfo):
+    """Check if device is supported."""
 
-    _LOGGER.debug(
-        "Checking if device %s is supported. Manufacturer data: %s",
+    LOGGER.debug(
+        "%s manufacturer data: %s",
         discovery_info.address,
         discovery_info.manufacturer_data,
     )
@@ -51,82 +41,166 @@ def _is_supported(discovery_info: BluetoothServiceInfo) -> bool:
     return manufacturer and service_husqvarna
 
 
+def _is_valid_bluetooth_address(address: str) -> bool:
+    """Validate if the provided string is a valid Bluetooth address format."""
+    if not address:
+        return False
+
+    # Bluetooth addresses are 6 groups of 2 hex digits separated by colons
+    # Format: XX:XX:XX:XX:XX:XX (case insensitive)
+    bluetooth_pattern = r"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"
+    return bool(re.match(bluetooth_pattern, address))
+
+
+def _pin_valid(pin: str) -> bool:
+    """Check if the pin is valid."""
+    try:
+        int(pin)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
 class HusqvarnaAutomowerBleConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Husqvarna Bluetooth."""
 
     VERSION = 1
 
-    def __init__(self) -> None:
-        """Initialize the config flow."""
-        self.address: str = ""
-        self.pin: int | None = None
-        _LOGGER.debug("Initializing Husqvarna Bluetooth config flow")
+    address: str | None = None
+    mower_name: str = ""
+    pin: str | None = None
 
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfo
     ) -> ConfigFlowResult:
-        """Handle the Bluetooth discovery step."""
+        """Handle the bluetooth discovery step."""
 
-        _LOGGER.debug("Discovered device: %s", discovery_info)
+        LOGGER.debug("Discovered device: %s", discovery_info)
         if not _is_supported(discovery_info):
             return self.async_abort(reason="no_devices_found")
 
         self.address = discovery_info.address
         await self.async_set_unique_id(self.address)
         self._abort_if_unique_id_configured()
-        return await self.async_step_user()
+        return await self.async_step_bluetooth_confirm()
+
+    async def async_step_bluetooth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm Bluetooth discovery."""
+        assert self.address
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            if not _pin_valid(user_input[CONF_PIN]):
+                errors["base"] = "invalid_pin"
+            else:
+                self.pin = user_input[CONF_PIN]
+                return await self.check_mower(user_input)
+
+        return self.async_show_form(
+            step_id="bluetooth_confirm",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(
+                    {
+                        vol.Required(CONF_PIN): str,
+                    },
+                ),
+                user_input,
+            ),
+            description_placeholders={"name": self.mower_name or self.address},
+            errors=errors,
+        )
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle the user input step."""
+        """Handle the initial manual step."""
+        errors: dict[str, str] = {}
 
-        _LOGGER.debug("Entering user input step")
+        if user_input is not None:
+            if not _is_valid_bluetooth_address(user_input[CONF_ADDRESS]):
+                errors["base"] = "invalid_address_format"
+            elif not _pin_valid(user_input[CONF_PIN]):
+                errors["base"] = "invalid_pin"
+            else:
+                self.address = user_input[CONF_ADDRESS]
+                self.pin = user_input[CONF_PIN]
+                await self.async_set_unique_id(self.address, raise_on_progress=False)
+                self._abort_if_unique_id_configured()
+                return await self.check_mower(user_input)
 
-        errors = {}
+        return self.async_show_form(
+            step_id="user",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(
+                    {
+                        vol.Required(CONF_ADDRESS): str,
+                        vol.Required(CONF_PIN): str,
+                    },
+                ),
+                user_input,
+            ),
+            errors=errors,
+        )
 
-        if user_input is None:
-            return self._show_user_form(errors)
+    async def probe_mower(self, device) -> str | None:
+        """Probe the mower to see if it exists."""
+        channel_id = random.randint(1, 0xFFFFFFFF)
 
-        self.address = user_input[CONF_ADDRESS]
-        self.pin = user_input.get(CONF_PIN)
-
-        # Validate the Bluetooth address and PIN
-        if not self.address or not _is_valid_bluetooth_address(self.address):
-            errors["base"] = "invalid_address_format"
-            return self._show_user_form(errors)
-
-        if self.pin is not None and (not isinstance(self.pin, int) or self.pin < 0):
-            errors["base"] = "invalid_pin_format"
-            return self._show_user_form(errors)
-
-        await self.async_set_unique_id(self.address, raise_on_progress=False)
-        self._abort_if_unique_id_configured()
+        assert self.address
 
         try:
-            device = bluetooth.async_ble_device_from_address(
-                self.hass, self.address, connectable=True
-            ) or await get_device(self.address)
+            (manufacturer, device_type, model) = await Mower(
+                channel_id, self.address
+            ).probe_gatts(device)
+        except (BleakError, TimeoutError) as exception:
+            LOGGER.exception("Failed to probe device (%s): %s", self.address, exception)
+            return None
 
-            if not device:
-                _LOGGER.error("Device not found: %s", self.address)
-                errors["base"] = "device_not_found"
-                return self._show_user_form(errors)
+        title = manufacturer + " " + device_type
 
-            channel_id = random.randint(1, 0xFFFFFFFF)
-            mower = Mower(channel_id, self.address, self.pin)
+        LOGGER.debug("Found device: %s", title)
 
-            # Probe the device
-            manufacture, device_type, model = await mower.probe_gatts(device)
-            if manufacture is None or device_type is None:
-                _LOGGER.error("Failed to probe device %s", self.address)
-                errors["base"] = "cannot_connect"
-                return self._show_user_form(errors)
+        return title
 
-            # Attempt to connect to the device
+    async def connect_mower(self, device) -> tuple[int, Mower]:
+        """Connect to the Mower."""
+        assert self.address
+        assert self.pin is not None
+
+        channel_id = random.randint(1, 0xFFFFFFFF)
+        mower = Mower(channel_id, self.address, int(self.pin))
+
+        return (channel_id, mower)
+
+    async def check_mower(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> ConfigFlowResult:
+        """Check that the mower exists and is setup."""
+        assert self.address
+
+        device = bluetooth.async_ble_device_from_address(
+            self.hass, self.address, connectable=True
+        )
+
+        title = await self.probe_mower(device)
+        if title is None:
+            return self.async_abort(reason="cannot_connect")
+        self.mower_name = title
+
+        try:
+            errors: dict[str, str] = {}
+
+            (channel_id, mower) = await self.connect_mower(device)
+
             response_result = await mower.connect(device)
+            await mower.disconnect()
+
             if response_result is not ResponseResult.OK:
-                _LOGGER.error("Failed to connect to device %s", self.address)
+                LOGGER.debug("cannot connect, response: %s", response_result)
+
                 if (
                     response_result is ResponseResult.INVALID_PIN
                     or response_result is ResponseResult.NOT_ALLOWED
@@ -134,47 +208,120 @@ class HusqvarnaAutomowerBleConfigFlow(ConfigFlow, domain=DOMAIN):
                     errors["base"] = "invalid_auth"
                 else:
                     errors["base"] = "cannot_connect"
-                return self._show_user_form(errors)
 
-            # Disconnect from the device
-            await mower.disconnect()
+                if self.source == SOURCE_BLUETOOTH:
+                    return self.async_show_form(
+                        step_id="bluetooth_confirm",
+                        data_schema=vol.Schema(
+                            {
+                                vol.Required(CONF_PIN): str,
+                            },
+                        ),
+                        description_placeholders={
+                            "name": self.mower_name or self.address
+                        },
+                        errors=errors,
+                    )
 
-            _LOGGER.debug("Successfully probed and connected to %s", self.address)
+                suggested_values = {}
 
-            # Create the configuration entry
-            title = f"{manufacture} {device_type.replace(chr(0), '')}"
-            _LOGGER.info("Creating configuration entry with title: %s", title)
-            return self.async_create_entry(
-                title=title,
-                data={
-                    CONF_ADDRESS: self.address,
-                    CONF_CLIENT_ID: channel_id,
-                    CONF_PIN: self.pin,
-                },
-            )
+                if self.address:
+                    suggested_values[CONF_ADDRESS] = self.address
+                if self.pin:
+                    suggested_values[CONF_PIN] = self.pin
 
-        except (BleakError, TimeoutError) as ex:
-            _LOGGER.error("Failed to connect to device at %s: %s", self.address, ex)
-            errors["base"] = "cannot_connect"
-        except Exception as ex:
-            _LOGGER.exception("Unexpected error: %s", ex)
-            errors["base"] = "exception"
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=self.add_suggested_values_to_schema(
+                        vol.Schema(
+                            {
+                                vol.Required(CONF_ADDRESS): str,
+                                vol.Required(CONF_PIN): str,
+                            },
+                        ),
+                        suggested_values,
+                    ),
+                    errors=errors,
+                )
+        except (TimeoutError, BleakError):
+            return self.async_abort(reason="cannot_connect")
 
-        return self._show_user_form(errors)
-
-    def _get_user_form_schema(self) -> vol.Schema:
-        """Get the user form schema."""
-        return vol.Schema(
-            {
-                vol.Required(CONF_ADDRESS, default=self.address): str,
-                vol.Optional(CONF_PIN): int,
+        return self.async_create_entry(
+            title=title,
+            data={
+                CONF_ADDRESS: self.address,
+                CONF_CLIENT_ID: channel_id,
+                CONF_PIN: self.pin,
             },
         )
 
-    def _show_user_form(self, errors: dict[str, str] | None = None) -> ConfigFlowResult:
-        """Show the user form with optional errors."""
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
+        """Perform reauthentication upon an API authentication error."""
+        reauth_entry = self._get_reauth_entry()
+        self.address = reauth_entry.data[CONF_ADDRESS]
+        self.mower_name = reauth_entry.title
+        self.pin = reauth_entry.data.get(CONF_PIN, "")
+
+        self.context["title_placeholders"] = {
+            "name": self.mower_name,
+            "address": self.address,
+        }
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm reauthentication dialog."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None and not _pin_valid(user_input[CONF_PIN]):
+            errors["base"] = "invalid_pin"
+        elif user_input is not None:
+            reauth_entry = self._get_reauth_entry()
+            self.pin = user_input[CONF_PIN]
+
+            try:
+                assert self.address
+                device = bluetooth.async_ble_device_from_address(
+                    self.hass, self.address, connectable=True
+                ) or await get_device(self.address)
+
+                mower = Mower(
+                    reauth_entry.data[CONF_CLIENT_ID], self.address, int(self.pin)
+                )
+
+                response_result = await mower.connect(device)
+                await mower.disconnect()
+                if (
+                    response_result is ResponseResult.INVALID_PIN
+                    or response_result is ResponseResult.NOT_ALLOWED
+                ):
+                    errors["base"] = "invalid_auth"
+                elif response_result is not ResponseResult.OK:
+                    errors["base"] = "cannot_connect"
+                else:
+                    return self.async_update_reload_and_abort(
+                        self._get_reauth_entry(),
+                        data=reauth_entry.data | {CONF_PIN: self.pin},
+                    )
+
+            except (TimeoutError, BleakError):
+                # We don't want to abort a reauth flow when we can't connect, so
+                # we just show the form again with an error.
+                errors["base"] = "cannot_connect"
+
         return self.async_show_form(
-            step_id="user",
-            data_schema=self._get_user_form_schema(),
-            errors=errors or {},
+            step_id="reauth_confirm",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(
+                    {
+                        vol.Required(CONF_PIN): str,
+                    },
+                ),
+                {CONF_PIN: self.pin},
+            ),
+            description_placeholders={"name": self.mower_name},
+            errors=errors,
         )

@@ -6,101 +6,95 @@ import asyncio
 from datetime import datetime, timedelta
 import logging
 from typing import Any
+from typing import TYPE_CHECKING
 
-from bleak_retry_connector import get_device
 from husqvarna_automower_ble.mower import Mower
 from husqvarna_automower_ble.protocol import ResponseResult
 from bleak import BleakError
+from bleak_retry_connector import close_stale_connections_by_address
 
 from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import (
-    DataUpdateCoordinator,
-    UpdateFailed,
-)
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN
 
-_LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from . import HusqvarnaConfigEntry
 
 SCAN_INTERVAL = timedelta(seconds=300)
 
 
-class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, str | int]]):
     """Class to manage fetching data."""
 
     def __init__(
         self,
         hass: HomeAssistant,
+        config_entry: HusqvarnaConfigEntry,
         mower: Mower,
         address: str,
-        manufacturer: str,
+        channel_id: str,
         model: str,
-        channel_id: int,
-        serial: str,
     ) -> None:
         """Initialize global data updater."""
         super().__init__(
             hass=hass,
-            logger=_LOGGER,
+            logger=LOGGER,
+            config_entry=config_entry,
             name=DOMAIN,
             update_interval=SCAN_INTERVAL,
         )
         self.address = address
-        self.manufacturer = manufacturer
+        self.channel_id = channel_id
         self.model = model
         self.mower = mower
-        self.channel_id = channel_id
-        self.serial = serial
         self._last_successful_update: datetime | None = None
         self._connection_lock = asyncio.Lock()
 
     async def async_shutdown(self) -> None:
         """Shutdown coordinator and any connection."""
-        _LOGGER.debug("Shutting down coordinator")
-
+        LOGGER.debug("Shutdown")
+        await super().async_shutdown()
         # Acquire the lock to ensure no operations are in progress during shutdown
         async with self._connection_lock:
             if self.mower.is_connected():
                 try:
                     await self.mower.disconnect()
-                    _LOGGER.debug("Disconnected mower during shutdown")
+                    LOGGER.debug("Disconnected mower during shutdown")
                 except Exception as ex:
-                    _LOGGER.warning("Error disconnecting during shutdown: %s", ex)
+                    LOGGER.warning("Error disconnecting during shutdown: %s", ex)
 
-        await super().async_shutdown()
-
-    async def _async_find_device(self) -> None:
-        """Attempt to reconnect to the device."""
-        _LOGGER.debug("Attempting to reconnect to the device")
+    async def _async_find_device(self):
+        LOGGER.debug("Trying to reconnect")
+        await close_stale_connections_by_address(self.address)
 
         device = bluetooth.async_ble_device_from_address(
             self.hass, self.address, connectable=True
-        ) or await get_device(self.address)
-        if not device:
-            _LOGGER.error("Failed to find device with address: %s", self.address)
-            raise UpdateFailed("Can't find device")
+        )
 
         try:
-            if await self.mower.connect(device) != ResponseResult.OK:
-                _LOGGER.error("Failed to connect to the mower")
+            if await self.mower.connect(device) is not ResponseResult.OK:
                 raise UpdateFailed("Failed to connect")
-        except (TimeoutError, BleakError) as ex:
-            _LOGGER.error("Error during connection attempt: %s", ex)
-            raise UpdateFailed("Failed to connect") from ex
+        except (TimeoutError, BleakError) as err:
+            raise UpdateFailed("Failed to connect") from err
 
-    async def _async_update_data(self) -> dict[str, Any]:
-        """Poll the device for updated data."""
-        _LOGGER.debug("Polling device for data")
+    async def _async_update_data(self) -> dict[str, str | int]:
+        """Poll the device."""
+        LOGGER.debug("Polling device")
 
-        data: dict[str, Any] = {}
+        data: dict[str, str | int] = {}
 
         async with self._connection_lock:
             try:
                 if not self.mower.is_connected():
                     await self._async_find_device()
+            except BleakError as err:
+                raise UpdateFailed("Failed to connect") from err
 
-                # Fetch data from the mower
+            try:
                 data["battery_level"] = await self.mower.battery_level()
                 data["is_charging"] = await self.mower.is_charging()
                 data["mode"] = await self.mower.mower_mode()
@@ -111,18 +105,21 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                 # Fetch mower statistics
                 stats = await self.mower.mower_statistics()
-                data["statistics"] = stats
+                data["total_running_time"] = stats["totalRunningTime"]
+                data["total_cutting_time"] = stats["totalCuttingTime"]
+                data["total_charging_time"] = stats["totalChargingTime"]
+                data["total_searching_time"] = stats["totalSearchingTime"]
+                data["number_of_collisions"] = stats["numberOfCollisions"]
+                data["number_of_charging_cycles"] = stats["numberOfChargingCycles"]
 
                 self._last_successful_update = datetime.now()
 
-                _LOGGER.debug("Successfully polled data: %s", data)
-
-            except (TimeoutError, BleakError) as ex:
-                _LOGGER.error("Error fetching data from device: %s", ex)
+            except BleakError as err:
+                LOGGER.error("Error getting data from device")
                 self.async_update_listeners()
-                raise UpdateFailed("Error fetching data from device") from ex
+                raise UpdateFailed("Error getting data from device") from err
             except Exception as ex:
-                _LOGGER.exception("Unexpected error while fetching data: %s", ex)
+                LOGGER.exception("Unexpected error while fetching data: %s", ex)
                 self.async_update_listeners()
                 raise UpdateFailed("Unexpected error fetching data") from ex
             finally:
@@ -134,7 +131,7 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_execute_command(self, command_func, *args, **kwargs) -> Any:
         """Execute a command on the mower with connection locking."""
-        _LOGGER.debug("Executing command: %s", command_func.__name__)
+        LOGGER.debug("Executing command: %s", command_func.__name__)
 
         async with self._connection_lock:
             try:
@@ -144,16 +141,16 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # Execute the command
                 result = await command_func(*args, **kwargs)
 
-                _LOGGER.debug("Command %s executed successfully", command_func.__name__)
+                LOGGER.debug("Command %s executed successfully", command_func.__name__)
                 return result
 
-            except (TimeoutError, BleakError) as ex:
-                _LOGGER.error(
+            except BleakError as ex:
+                LOGGER.error(
                     "Error executing command %s: %s", command_func.__name__, ex
                 )
                 raise
             except Exception as ex:
-                _LOGGER.exception(
+                LOGGER.exception(
                     "Unexpected error executing command %s: %s",
                     command_func.__name__,
                     ex,

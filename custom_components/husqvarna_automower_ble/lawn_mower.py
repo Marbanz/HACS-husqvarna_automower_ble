@@ -1,4 +1,4 @@
-"""Husqvarna Automower BLE lawn mower entity."""
+"""The Husqvarna Autoconnect Bluetooth lawn mower platform."""
 
 from __future__ import annotations
 
@@ -12,42 +12,31 @@ from homeassistant.components.lawn_mower import (
     LawnMowerEntity,
     LawnMowerEntityFeature,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers import config_validation as cv, entity_platform
 
-from .const import DOMAIN
+from . import HusqvarnaConfigEntry
 from .coordinator import HusqvarnaCoordinator
 from .entity import HusqvarnaAutomowerBleEntity
 
-_LOGGER = logging.getLogger(__name__)
-
-FEATURES = (
-    LawnMowerEntityFeature.PAUSE
-    | LawnMowerEntityFeature.START_MOWING
-    | LawnMowerEntityFeature.DOCK
-)
+LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    config_entry: HusqvarnaConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up AutomowerLawnMower integration from a config entry."""
-    coordinator: HusqvarnaCoordinator = hass.data[DOMAIN][config_entry.entry_id]
-    model = coordinator.model
+    coordinator = config_entry.runtime_data
     address = coordinator.address
 
     async_add_entities(
         [
             AutomowerLawnMower(
                 coordinator,
-                f"automower_{model}_{address}",
-                model,
-                FEATURES,
+                address,
             ),
         ]
     )
@@ -68,35 +57,29 @@ async def async_setup_entry(
 class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
     """Husqvarna Automower."""
 
+    _attr_name = None
+    _attr_supported_features = (
+        LawnMowerEntityFeature.PAUSE
+        | LawnMowerEntityFeature.START_MOWING
+        | LawnMowerEntityFeature.DOCK
+    )
+
     def __init__(
         self,
         coordinator: HusqvarnaCoordinator,
-        unique_id: str,
-        name: str,
-        features: LawnMowerEntityFeature = LawnMowerEntityFeature(0),
+        address: str,
     ) -> None:
         """Initialize the lawn mower."""
         super().__init__(coordinator)
-        self._attr_name = name
-        self._attr_unique_id = unique_id
-        self._attr_supported_features = features
-        self._attr_activity = None
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.serial)},
-            manufacturer=coordinator.manufacturer,
-            model=coordinator.model,
-        )
+        self._attr_unique_id = str(address)
 
     def _get_activity(self) -> LawnMowerActivity | None:
         """Return the current lawn mower activity."""
-        if not self.coordinator.data:
-            _LOGGER.warning("Coordinator data is unavailable")
+        if self.coordinator.data is None:
             return None
 
-        state = self.coordinator.data.get("state")
-        activity = self.coordinator.data.get("activity")
-
-        _LOGGER.debug(f"Mower state: {state}, Mower activity: {activity}")
+        state = self.coordinator.data["state"]
+        activity = self.coordinator.data["activity"]
 
         if state is None or activity is None:
             return None
@@ -105,6 +88,10 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
             return LawnMowerActivity.PAUSED
         if state in (MowerState.STOPPED, MowerState.OFF, MowerState.WAIT_FOR_SAFETYPIN):
             # This is actually stopped, but that isn't an option
+            return LawnMowerActivity.ERROR
+        if state == MowerState.PENDING_START and activity == MowerActivity.NONE:
+            # This happens when the mower is safety stopped and we try to send a
+            # command to start it.
             return LawnMowerActivity.ERROR
         if state in (
             MowerState.RESTRICTED,
@@ -125,7 +112,7 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
 
     async def async_added_to_hass(self) -> None:
         """Handle when the entity is added to Home Assistant."""
-        _LOGGER.debug("AutomowerLawnMower entity added to Home Assistant")
+        LOGGER.debug("AutomowerLawnMower: entity added to Home Assistant")
         self._attr_activity = self._get_activity()
         self._attr_available = self._attr_activity is not None and self.available
         await super().async_added_to_hass()
@@ -133,14 +120,15 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        _LOGGER.debug("Handling coordinator update for AutomowerLawnMower")
+        LOGGER.debug("AutomowerLawnMower: _handle_coordinator_update")
+
         self._attr_activity = self._get_activity()
         self._attr_available = self._attr_activity is not None and self.available
         super()._handle_coordinator_update()
 
     async def async_start_mowing(self) -> None:
         """Start mowing."""
-        _LOGGER.debug("Starting mower")
+        LOGGER.debug("Starting mower")
 
         try:
             await self.coordinator.async_execute_command(
@@ -157,11 +145,11 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
             self._attr_activity = self._get_activity()
             self.async_write_ha_state()
         except Exception as ex:
-            _LOGGER.error("Failed to start mowing: %s", ex)
+            LOGGER.error("Failed to start mowing: %s", ex)
 
     async def async_dock(self) -> None:
         """Start docking."""
-        _LOGGER.debug("Docking mower")
+        LOGGER.debug("Docking mower")
 
         try:
             await self.coordinator.async_execute_command(
@@ -174,11 +162,11 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
             self._attr_activity = self._get_activity()
             self.async_write_ha_state()
         except Exception as ex:
-            _LOGGER.error("Failed to dock mower: %s", ex)
+            LOGGER.error("Failed to dock mower: %s", ex)
 
     async def async_pause(self) -> None:
         """Pause mower."""
-        _LOGGER.debug("Pausing mower")
+        LOGGER.debug("Pausing mower")
 
         try:
             await self.coordinator.async_execute_command(
@@ -191,11 +179,11 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
             self._attr_activity = self._get_activity()
             self.async_write_ha_state()
         except Exception as ex:
-            _LOGGER.error("Failed to pause mower: %s", ex)
+            LOGGER.error("Failed to pause mower: %s", ex)
 
     async def async_park_indefinitely(self) -> None:
         """Park mower indefinitely."""
-        _LOGGER.debug("Parking mower indefinitely")
+        LOGGER.debug("Parking mower indefinitely")
 
         try:
             await self.coordinator.async_execute_command(
@@ -208,11 +196,11 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
             self._attr_activity = self._get_activity()
             self.async_write_ha_state()
         except Exception as ex:
-            _LOGGER.error("Failed to park mower indefinitely: %s", ex)
+            LOGGER.error("Failed to park mower indefinitely: %s", ex)
 
     async def async_resume_schedule(self) -> None:
         """Resume mower schedule."""
-        _LOGGER.debug("Resuming mower schedule")
+        LOGGER.debug("Resuming mower schedule")
 
         try:
             await self.coordinator.async_execute_command(
@@ -225,4 +213,4 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
             self._attr_activity = self._get_activity()
             self.async_write_ha_state()
         except Exception as ex:
-            _LOGGER.error("Failed to resume mower schedule: %s", ex)
+            LOGGER.error("Failed to resume mower schedule: %s", ex)
