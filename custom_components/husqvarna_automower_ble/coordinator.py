@@ -92,6 +92,7 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, str | int]]):
                 if not self.mower.is_connected():
                     await self._async_find_device()
             except BleakError as err:
+                self.async_update_listeners()
                 raise UpdateFailed("Failed to connect") from err
 
             try:
