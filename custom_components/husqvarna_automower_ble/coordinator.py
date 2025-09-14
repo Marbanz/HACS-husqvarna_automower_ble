@@ -24,7 +24,7 @@ LOGGER = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from . import HusqvarnaConfigEntry
 
-SCAN_INTERVAL = timedelta(seconds=300)
+SCAN_INTERVAL = timedelta(seconds=600)
 
 
 class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, str | int]]):
