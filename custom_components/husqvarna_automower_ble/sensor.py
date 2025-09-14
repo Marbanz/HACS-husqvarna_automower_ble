@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from husqvarna_automower_ble.protocol import ModeOfOperation, MowerState, MowerActivity
 from husqvarna_automower_ble.error_codes import ErrorCodes
@@ -15,7 +15,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTime
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import HusqvarnaConfigEntry
@@ -139,7 +139,8 @@ class HusqvarnaAutomowerBleSensor(HusqvarnaAutomowerBleDescriptorEntity, SensorE
 
     entity_description: SensorEntityDescription
 
-    def _get_state(self) -> str | None:
+    @property
+    def native_value(self) -> str | None:
         """Return the state of the sensor."""
         try:
             key = self.entity_description.key
@@ -172,24 +173,3 @@ class HusqvarnaAutomowerBleSensor(HusqvarnaAutomowerBleDescriptorEntity, SensorE
                 exc_info=True,
             )
             return None
-
-    @property
-    def available(self) -> bool:
-        """Return if the sensor is available."""
-        last_update = self.coordinator._last_successful_update
-        if last_update is None:
-            return False
-        return datetime.now() - last_update < timedelta(minutes=12)
-
-    async def async_added_to_hass(self) -> None:
-        """Handle when the entity is added to Home Assistant."""
-        self._attr_native_value = self._get_state()
-        self._attr_available = self.available
-        await super().async_added_to_hass()
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle coordinator update."""
-        self._attr_native_value = self._get_state()
-        self._attr_available = self.available
-        super()._handle_coordinator_update()
