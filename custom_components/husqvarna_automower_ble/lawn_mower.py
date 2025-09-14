@@ -113,6 +113,7 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
     async def async_added_to_hass(self) -> None:
         """Handle when the entity is added to Home Assistant."""
         LOGGER.debug("AutomowerLawnMower: entity added to Home Assistant")
+
         self._attr_activity = self._get_activity()
         self._attr_available = self._attr_activity is not None and self.available
         await super().async_added_to_hass()
