@@ -144,6 +144,10 @@ class HusqvarnaAutomowerBleSensor(HusqvarnaAutomowerBleDescriptorEntity, SensorE
         """Return the state of the sensor."""
         try:
             key = self.entity_description.key
+            # Check if key exists in coordinator data
+            if key not in self.coordinator.data:
+                LOGGER.debug("Key '%s' not found in coordinator data", key)
+                return None
             value = self.coordinator.data[key]
 
             if key == "mode":
