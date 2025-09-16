@@ -216,8 +216,11 @@ class AutomowerSensorEntity(CoordinatorEntity, SensorEntity):
 
             if is_statistic_sensor:
                 # Access value from the nested 'statistics' dictionary
-                stats_data = self.coordinator.data.get("statistics", {})
-                value = stats_data[key]
+                stats_data = self.coordinator.data.get("statistics")
+                if stats_data is None:
+                    # Statistics are not available
+                    return None
+                value = stats_data.get(key)
             else:
                 value = self.coordinator.data[key]
                 if key == "mode":
