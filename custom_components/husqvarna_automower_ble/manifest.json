@@ -11,6 +11,7 @@
   "config_flow": true,
   "dependencies": ["bluetooth_adapters"],
   "documentation": "https://github.com/Marbanz/HACS-husqvarna_automower_ble/",
+  "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Marbanz/HACS-husqvarna_automower_ble/issues",
   "requirements": [
