@@ -59,9 +59,8 @@ def _is_supported(discovery_info: BluetoothServiceInfo):
     manufacturer_data = ManufacturerData.decode(data)
     product_type = ProductType.from_manufacturer_data(manufacturer_data)
 
-    # Some mowers only expose the serial number in the manufacturer data
-    # and not the product type, so we allow None here as well.
-    if product_type not in (ProductType.MOWER, None):
+    # Some mowers only expose the serial number in the manufacturer data and not the product type
+    if product_type not in (ProductType.MOWER, ProductType.UNKNOWN):
         LOGGER.debug("Unsupported device: %s (%s)", manufacturer_data, discovery_info)
         return False
 
