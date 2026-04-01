@@ -14,7 +14,7 @@ from homeassistant.components.lawn_mower import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers import config_validation as cv, entity_platform
+from homeassistant.helpers import entity_platform
 
 from . import HusqvarnaConfigEntry
 from .coordinator import HusqvarnaCoordinator
