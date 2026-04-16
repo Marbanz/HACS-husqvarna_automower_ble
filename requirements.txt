@@ -1,4 +1,4 @@
-husqvarna-automower-ble==1.5.0
+husqvarna-automower-ble==1.5.4
 gardena-bluetooth==2.1.0
 homeassistant>=2025.7.0
 ruff>=0.6.0

@@ -165,9 +165,7 @@ class HusqvarnaAutomowerBleSensor(HusqvarnaAutomowerBleDescriptorEntity, SensorE
             elif key == "next_start_time" and value is not None:
                 # Ensure value is a datetime object for TIMESTAMP device class
                 if isinstance(value, datetime):
-                    if not value.tzinfo:
-                        # Naive datetime - convert to Home Assistant timezone
-                        value = dt_util.as_local(value)
+                    value = dt_util.as_local(value)
                 else:
                     LOGGER.warning(
                         "Expected datetime for next_start_time, got %s", type(value)
