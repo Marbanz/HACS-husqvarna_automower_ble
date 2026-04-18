@@ -144,7 +144,7 @@ class HusqvarnaAutomowerBleSensor(HusqvarnaAutomowerBleDescriptorEntity, SensorE
     entity_description: SensorEntityDescription
 
     @property
-    def native_value(self) -> str | None:
+    def native_value(self) -> str | datetime | int | None:
         """Return the state of the sensor."""
         try:
             key = self.entity_description.key
