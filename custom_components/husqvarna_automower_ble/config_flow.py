@@ -68,7 +68,7 @@ class HusqvarnaAutomowerBleConfigFlow(ConfigFlow, domain=DOMAIN):
     address: str | None = None
     mower_name: str = ""
     pin: str | None = None
-    pairable: bool = True
+    pairable: bool | None = None
 
     def _is_supported(self, discovery_info: BluetoothServiceInfo):
         """Check if device is supported."""
@@ -129,19 +129,18 @@ class HusqvarnaAutomowerBleConfigFlow(ConfigFlow, domain=DOMAIN):
         assert self.address
         errors: dict[str, str] = {}
 
-        if not self.pairable:
-            LOGGER.error(
-                "The mower does not appear to be pairable. "
-                "Ensure the mower is in pairing mode before continuing. "
-                "If the mower isn't pairable you will receive authentication "
-                "errors and be unable to connect"
-            )
-
         if user_input is not None:
             if not _pin_valid(user_input[CONF_PIN]):
                 errors["base"] = "invalid_pin"
             else:
                 self.pin = user_input[CONF_PIN]
+                if self.pairable is False:
+                    LOGGER.warning(
+                        "The mower does not appear to be pairable. "
+                        "Ensure the mower is in pairing mode before continuing. "
+                        "If the mower isn't pairable you will receive authentication "
+                        "errors and be unable to connect"
+                    )
                 return await self.check_mower(user_input)
 
         return self.async_show_form(
