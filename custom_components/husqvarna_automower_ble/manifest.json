@@ -15,7 +15,7 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Marbanz/HACS-husqvarna_automower_ble/issues",
   "requirements": [
-    "husqvarna-automower-ble==1.6.0",
+    "husqvarna-automower-ble==1.6.1",
     "gardena-bluetooth==2.3.0"
   ],
   "version": "2.3.0"
