@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 from husqvarna_automower_ble.mower import Mower
 from husqvarna_automower_ble.protocol import MowerActivity, ResponseResult
 from bleak import BleakError
-from bleak_retry_connector import close_stale_connections_by_address
 
 from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
@@ -29,7 +28,7 @@ IDLE_SCAN_INTERVAL = timedelta(seconds=1800)  # 30 minutes
 ACTIVE_SCAN_INTERVAL = timedelta(seconds=120)  # 2 minutes
 
 
-class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, str | int]]):
+class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Class to manage fetching data."""
 
     def __init__(
@@ -53,26 +52,11 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, str | int]]):
         self.channel_id = channel_id
         self.model = model
         self.mower = mower
-        self._last_successful_update: datetime | None = None
         self._connection_lock = asyncio.Lock()
+        self._last_successful_update: datetime | None = None
         self._consecutive_update_failures = 0
-        self._first_runtime_poll_pending = True
 
-    def _register_update_failure(self) -> None:
-        """Track failed update attempts and handle first runtime poll failure."""
-        self._consecutive_update_failures += 1
-        if (
-            self._first_runtime_poll_pending
-            and self._last_successful_update is not None
-        ):
-            LOGGER.debug("First runtime poll failed after restart; forcing unavailable")
-            self._consecutive_update_failures = max(
-                self._consecutive_update_failures,
-                2,
-            )
-            self._first_runtime_poll_pending = False
-
-    def _get_dynamic_update_interval(self, data: dict[str, str | int]) -> timedelta:
+    def _get_dynamic_update_interval(self, data: dict[str, Any]) -> timedelta:
         """Return poll interval based on mower activity and next start time."""
         activity = data.get("activity")
         try:
@@ -103,7 +87,7 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, str | int]]):
 
         return IDLE_SCAN_INTERVAL
 
-    def _update_scan_interval(self, data: dict[str, str | int]) -> None:
+    def _update_scan_interval(self, data: dict[str, Any]) -> None:
         """Update coordinator interval if mower activity changed."""
         new_interval = self._get_dynamic_update_interval(data)
         if self.update_interval == new_interval:
@@ -133,8 +117,6 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, str | int]]):
 
     async def _async_find_device(self):
         LOGGER.debug("Trying to reconnect")
-        await close_stale_connections_by_address(self.address)
-
         device = bluetooth.async_ble_device_from_address(
             self.hass, self.address, connectable=True
         )
@@ -145,18 +127,18 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, str | int]]):
         except (TimeoutError, BleakError) as err:
             raise UpdateFailed("Failed to connect") from err
 
-    async def _async_update_data(self) -> dict[str, str | int]:
+    async def _async_update_data(self) -> dict[str, Any]:
         """Poll the device."""
         LOGGER.debug("Polling device")
 
-        data: dict[str, str | int] = {}
+        data: dict[str, Any] = {}
 
         async with self._connection_lock:
             try:
                 if not self.mower.is_connected():
                     await self._async_find_device()
             except (BleakError, UpdateFailed) as err:
-                self._register_update_failure()
+                self._consecutive_update_failures += 1
                 self.async_update_listeners()
                 raise UpdateFailed("Failed to connect") from err
 
@@ -182,22 +164,21 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, str | int]]):
                             "numberOfChargingCycles"
                         ]
                 except Exception as ex:
-                    LOGGER.warning("Failed to fetch mower statistics: %s", ex)
+                    LOGGER.debug("Failed to fetch mower statistics: %s", ex)
                     # Continue without statistics data
 
-                self._first_runtime_poll_pending = False
                 self._consecutive_update_failures = 0
                 self._update_scan_interval(data)
                 self._last_successful_update = datetime.now()
 
             except BleakError as err:
                 LOGGER.error("Error getting data from device")
-                self._register_update_failure()
+                self._consecutive_update_failures += 1
                 self.async_update_listeners()
                 raise UpdateFailed("Error getting data from device") from err
             except Exception as ex:
                 LOGGER.exception("Unexpected error while fetching data: %s", ex)
-                self._register_update_failure()
+                self._consecutive_update_failures += 1
                 self.async_update_listeners()
                 raise UpdateFailed("Unexpected error fetching data") from ex
             finally:
