@@ -68,6 +68,7 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             MowerActivity.MOWING,
             MowerActivity.GOING_OUT,
             MowerActivity.GOING_HOME,
+            MowerActivity.CHARGING,
         ):
             return ACTIVE_SCAN_INTERVAL
 
