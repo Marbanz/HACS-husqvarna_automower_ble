@@ -16,7 +16,7 @@
   "issue_tracker": "https://github.com/Marbanz/HACS-husqvarna_automower_ble/issues",
   "requirements": [
     "husqvarna-automower-ble==1.6.1",
-    "gardena-bluetooth==2.3.0"
+    "gardena-bluetooth==2.8.1"
   ],
-  "version": "2.3.0"
+  "version": "2.3.2"
 }
