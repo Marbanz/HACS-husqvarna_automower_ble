@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING
 
 from husqvarna_automower_ble.mower import Mower
 from husqvarna_automower_ble.protocol import MowerActivity, ResponseResult
-from bleak import BleakError
+from bleak.exc import BleakError
+from bleak_retry_connector import close_stale_connections_by_address
 
 from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
@@ -110,11 +111,7 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Acquire the lock to ensure no operations are in progress during shutdown
         async with self._connection_lock:
             if self.mower.is_connected():
-                try:
-                    await self.mower.disconnect()
-                    LOGGER.debug("Disconnected mower during shutdown")
-                except Exception as ex:
-                    LOGGER.warning("Error disconnecting during shutdown: %s", ex)
+                await self.mower.disconnect()
 
     async def _async_find_device(self):
         LOGGER.debug("Trying to reconnect")
@@ -125,7 +122,8 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             if await self.mower.connect(device) is not ResponseResult.OK:
                 raise UpdateFailed("Failed to connect")
-        except (TimeoutError, BleakError) as err:
+        except (BleakError, TimeoutError) as err:
+            await close_stale_connections_by_address(self.address)
             raise UpdateFailed("Failed to connect") from err
 
     async def _async_update_data(self) -> dict[str, Any]:

@@ -6,7 +6,7 @@ import logging
 
 from husqvarna_automower_ble.mower import Mower
 from husqvarna_automower_ble.protocol import ResponseResult
-from bleak import BleakError
+from bleak.exc import BleakError
 from bleak_retry_connector import close_stale_connections_by_address, get_device
 
 from homeassistant.components import bluetooth
@@ -52,6 +52,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: HusqvarnaConfigEntry) ->
         device = bluetooth.async_ble_device_from_address(
             hass, address, connectable=True
         ) or await get_device(address)
+        if device is None:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="connection_failed",
+                translation_placeholders={
+                    "address": address,
+                    "error": "device not found",
+                    "reason": bluetooth.async_address_reachability_diagnostics(
+                        hass,
+                        address.upper(),
+                        BluetoothReachabilityIntent.CONNECTION,
+                    ),
+                },
+            )
         response_result = await mower.connect(device)
         if response_result == ResponseResult.INVALID_PIN:
             raise ConfigEntryAuthFailed(
@@ -59,7 +73,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: HusqvarnaConfigEntry) ->
             )
         if response_result != ResponseResult.OK:
             raise ConfigEntryNotReady(
-                f"Unable to connect to device {address}, mower returned {response_result}"
+                translation_domain=DOMAIN,
+                translation_key="connection_failed",
+                translation_placeholders={
+                    "address": address,
+                    "error": response_result.name,
+                    "reason": bluetooth.async_address_reachability_diagnostics(
+                        hass,
+                        address.upper(),
+                        BluetoothReachabilityIntent.CONNECTION,
+                    ),
+                },
             )
     except (TimeoutError, BleakError) as exception:
         raise ConfigEntryNotReady(
@@ -81,7 +105,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HusqvarnaConfigEntry) ->
     model = await mower.get_model()
     LOGGER.debug("Connected to Automower: %s", model)
 
-    coordinator = HusqvarnaCoordinator(hass, entry, mower, address, channel_id, model)
+    coordinator = HusqvarnaCoordinator(hass, entry, mower, address, channel_id, model) # type: ignore
 
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator

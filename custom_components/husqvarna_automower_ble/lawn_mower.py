@@ -8,9 +8,9 @@ import logging
 from husqvarna_automower_ble.protocol import MowerActivity, MowerState
 
 from homeassistant.components.lawn_mower import (
-    LawnMowerActivity,
+    LawnMowerActivity, # type: ignore
     LawnMowerEntity,
-    LawnMowerEntityFeature,
+    LawnMowerEntityFeature, # type: ignore
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
