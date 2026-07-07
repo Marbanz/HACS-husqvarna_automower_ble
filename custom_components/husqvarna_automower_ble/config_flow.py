@@ -194,7 +194,7 @@ class HusqvarnaAutomowerBleConfigFlow(ConfigFlow, domain=DOMAIN):
             LOGGER.exception("Failed to probe device (%s): %s", self.address, exception)
             return None
 
-        title = manufacturer + " " + device_type # type: ignore
+        title = manufacturer + " " + device_type  # type: ignore
 
         LOGGER.debug("Found device: %s", title)
 
@@ -307,7 +307,7 @@ class HusqvarnaAutomowerBleConfigFlow(ConfigFlow, domain=DOMAIN):
         self.mower_name = reauth_entry.title
         self.pin = reauth_entry.data.get(CONF_PIN, "")
 
-        self.context["title_placeholders"] = { # type: ignore
+        self.context["title_placeholders"] = {  # type: ignore
             "name": self.mower_name,
             "address": self.address,
         }
@@ -332,7 +332,9 @@ class HusqvarnaAutomowerBleConfigFlow(ConfigFlow, domain=DOMAIN):
                 ) or await get_device(self.address)
 
                 mower = Mower(
-                    reauth_entry.data[CONF_CLIENT_ID], self.address, int(self.pin) # type: ignore
+                    reauth_entry.data[CONF_CLIENT_ID],
+                    self.address,
+                    int(self.pin),  # type: ignore
                 )
 
                 response_result = await mower.connect(device)
