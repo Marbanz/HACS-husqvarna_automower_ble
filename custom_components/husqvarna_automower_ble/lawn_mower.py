@@ -12,11 +12,13 @@ from homeassistant.components.lawn_mower import (
     LawnMowerEntity,
     LawnMowerEntityFeature,  # type: ignore
 )
+from homeassistant.components import persistent_notification
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers import entity_platform
 
 from . import HusqvarnaConfigEntry
+from .const import INTEGRATION_TITLE
 from .coordinator import HusqvarnaCoordinator
 from .entity import HusqvarnaAutomowerBleEntity
 
@@ -110,6 +112,14 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
                 return LawnMowerActivity.RETURNING
         return LawnMowerActivity.ERROR
 
+    async def _async_refresh_activity(self) -> None:
+        """Refresh mower state after a successful command."""
+        await asyncio.sleep(1)
+        await self.coordinator.async_request_refresh()
+
+        self._attr_activity = self._get_activity()
+        self.async_write_ha_state()
+
     async def async_added_to_hass(self) -> None:
         """Handle when the entity is added to Home Assistant."""
         LOGGER.debug("AutomowerLawnMower: entity added to Home Assistant")
@@ -131,87 +141,107 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
         """Start mowing."""
         LOGGER.debug("Starting mower")
 
-        try:
-            await self.coordinator.async_execute_command(
+        if self._attr_activity == LawnMowerActivity.DOCKED:
+            success = await self.coordinator.async_execute_command(
+                self.coordinator.mower.mower_override
+            )
+            if not success:
+                LOGGER.warning(
+                    "Failed to start mowing: mower_override was not accepted"
+                )
+                persistent_notification.async_create(
+                    self.hass,
+                    "The mower did not accept the start mowing override. The mower state will still be updated.",
+                    title=INTEGRATION_TITLE,
+                    notification_id=f"{self._attr_unique_id}_mower_override",
+                )
+        else:
+            success = await self.coordinator.async_execute_command(
                 self.coordinator.mower.mower_resume
             )
-            if self._attr_activity == LawnMowerActivity.DOCKED:
-                await self.coordinator.async_execute_command(
-                    self.coordinator.mower.mower_override
+            if not success:
+                LOGGER.warning("Failed to start mowing: mower_resume was not accepted")
+                persistent_notification.async_create(
+                    self.hass,
+                    "The mower did not accept the start mowing command. The mower state will still be updated.",
+                    title=INTEGRATION_TITLE,
+                    notification_id=f"{self._attr_unique_id}_mower_resume",
                 )
 
-            await asyncio.sleep(1)
-            await self.coordinator.async_request_refresh()
-
-            self._attr_activity = self._get_activity()
-            self.async_write_ha_state()
-        except Exception as ex:
-            LOGGER.error("Failed to start mowing: %s", ex)
+        await self._async_refresh_activity()
 
     async def async_dock(self) -> None:
         """Start docking."""
         LOGGER.debug("Docking mower")
 
-        try:
-            await self.coordinator.async_execute_command(
-                self.coordinator.mower.mower_park
+        success = await self.coordinator.async_execute_command(
+            self.coordinator.mower.mower_park
+        )
+        if not success:
+            LOGGER.warning("Failed to dock mower: mower_park was not accepted")
+            persistent_notification.async_create(
+                self.hass,
+                "The mower did not accept the docking command. The mower state will still be updated.",
+                title=INTEGRATION_TITLE,
+                notification_id=f"{self._attr_unique_id}_mower_park",
             )
 
-            await asyncio.sleep(1)
-            await self.coordinator.async_request_refresh()
-
-            self._attr_activity = self._get_activity()
-            self.async_write_ha_state()
-        except Exception as ex:
-            LOGGER.error("Failed to dock mower: %s", ex)
+        await self._async_refresh_activity()
 
     async def async_pause(self) -> None:
         """Pause mower."""
         LOGGER.debug("Pausing mower")
 
-        try:
-            await self.coordinator.async_execute_command(
-                self.coordinator.mower.mower_pause
+        success = await self.coordinator.async_execute_command(
+            self.coordinator.mower.mower_pause
+        )
+        if not success:
+            LOGGER.warning("Failed to pause mower: mower_pause was not accepted")
+            persistent_notification.async_create(
+                self.hass,
+                "The mower did not accept the pause command. The mower state will still be updated.",
+                title=INTEGRATION_TITLE,
+                notification_id=f"{self._attr_unique_id}_mower_pause",
             )
 
-            await asyncio.sleep(1)
-            await self.coordinator.async_request_refresh()
-
-            self._attr_activity = self._get_activity()
-            self.async_write_ha_state()
-        except Exception as ex:
-            LOGGER.error("Failed to pause mower: %s", ex)
+        await self._async_refresh_activity()
 
     async def async_park_indefinitely(self) -> None:
         """Park mower indefinitely."""
         LOGGER.debug("Parking mower indefinitely")
 
-        try:
-            await self.coordinator.async_execute_command(
-                self.coordinator.mower.mower_park_indefinitely
+        success = await self.coordinator.async_execute_command(
+            self.coordinator.mower.mower_park_indefinitely
+        )
+        if not success:
+            LOGGER.warning(
+                "Failed to park mower indefinitely: mower_park_indefinitely was not accepted"
+            )
+            persistent_notification.async_create(
+                self.hass,
+                "The mower did not accept the park indefinitely command. The mower state will still be updated.",
+                title=INTEGRATION_TITLE,
+                notification_id=f"{self._attr_unique_id}_mower_park_indefinitely",
             )
 
-            await asyncio.sleep(1)
-            await self.coordinator.async_request_refresh()
-
-            self._attr_activity = self._get_activity()
-            self.async_write_ha_state()
-        except Exception as ex:
-            LOGGER.error("Failed to park mower indefinitely: %s", ex)
+        await self._async_refresh_activity()
 
     async def async_resume_schedule(self) -> None:
         """Resume mower schedule."""
         LOGGER.debug("Resuming mower schedule")
 
-        try:
-            await self.coordinator.async_execute_command(
-                self.coordinator.mower.mower_auto
+        success = await self.coordinator.async_execute_command(
+            self.coordinator.mower.mower_auto
+        )
+        if not success:
+            LOGGER.warning(
+                "Failed to resume mower schedule: mower_auto was not accepted"
+            )
+            persistent_notification.async_create(
+                self.hass,
+                "The mower did not accept the resume schedule command. The mower state will still be updated.",
+                title=INTEGRATION_TITLE,
+                notification_id=f"{self._attr_unique_id}_mower_auto",
             )
 
-            await asyncio.sleep(1)
-            await self.coordinator.async_request_refresh()
-
-            self._attr_activity = self._get_activity()
-            self.async_write_ha_state()
-        except Exception as ex:
-            LOGGER.error("Failed to resume mower schedule: %s", ex)
+        await self._async_refresh_activity()
