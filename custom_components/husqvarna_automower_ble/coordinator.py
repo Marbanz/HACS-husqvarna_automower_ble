@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime, timedelta
 import logging
 from typing import Any
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from husqvarna_automower_ble.mower import Mower
 from husqvarna_automower_ble.protocol import MowerActivity, ResponseResult
@@ -104,6 +104,7 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.update_interval = new_interval
 
+    @override
     async def async_shutdown(self) -> None:
         """Shutdown coordinator and any connection."""
         LOGGER.debug("Shutdown")
@@ -126,6 +127,7 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await close_stale_connections_by_address(self.address)
             raise UpdateFailed("Failed to connect") from err
 
+    @override
     async def _async_update_data(self) -> dict[str, Any]:
         """Poll the device."""
         LOGGER.debug("Polling device")

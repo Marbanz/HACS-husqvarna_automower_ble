@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import override
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -50,6 +51,7 @@ class HusqvarnaAutomowerBleBinarySensor(
     entity_description: BinarySensorEntityDescription
 
     @property
+    @override
     def is_on(self) -> bool | None:
         """Return the state of the binary sensor."""
         try:

@@ -1,6 +1,7 @@
 """Provides the HusqvarnaAutomowerBleEntity."""
 
 from __future__ import annotations
+from typing import override
 
 from homeassistant.helpers.device_registry import (
     CONNECTION_BLUETOOTH,
@@ -32,6 +33,7 @@ class HusqvarnaAutomowerBleEntity(CoordinatorEntity[HusqvarnaCoordinator]):
         )
 
     @property
+    @override
     def available(self) -> bool:
         """Return if entity is available."""
         if self.coordinator._last_successful_update is None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import override
 
 from husqvarna_automower_ble.protocol import ModeOfOperation, MowerState, MowerActivity
 from husqvarna_automower_ble.error_codes import ErrorCodes
@@ -144,6 +145,7 @@ class HusqvarnaAutomowerBleSensor(HusqvarnaAutomowerBleDescriptorEntity, SensorE
     entity_description: SensorEntityDescription
 
     @property
+    @override
     def native_value(self) -> str | datetime | int | None:
         """Return the state of the sensor."""
         try:
