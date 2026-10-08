@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import override
 
 from husqvarna_automower_ble.protocol import MowerActivity, MowerState
 
@@ -89,8 +90,7 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
         if state == MowerState.PAUSED:
             return LawnMowerActivity.PAUSED
         if state in (MowerState.STOPPED, MowerState.OFF, MowerState.WAIT_FOR_SAFETYPIN):
-            # This is actually stopped, but that isn't an option
-            return LawnMowerActivity.ERROR
+            return LawnMowerActivity.IDLE
         if state == MowerState.PENDING_START and activity == MowerActivity.NONE:
             # This happens when the mower is safety stopped and we try to send a
             # command to start it.
@@ -120,6 +120,8 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
         self._attr_activity = self._get_activity()
         self.async_write_ha_state()
 
+    @callback
+    @override
     async def async_added_to_hass(self) -> None:
         """Handle when the entity is added to Home Assistant."""
         LOGGER.debug("AutomowerLawnMower: entity added to Home Assistant")
@@ -129,6 +131,7 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
         await super().async_added_to_hass()
 
     @callback
+    @override
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         LOGGER.debug("AutomowerLawnMower: _handle_coordinator_update")
@@ -137,6 +140,7 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
         self._attr_available = self._attr_activity is not None and self.available
         super()._handle_coordinator_update()
 
+    @override
     async def async_start_mowing(self) -> None:
         """Start mowing."""
         LOGGER.debug("Starting mower")
@@ -170,6 +174,7 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
 
         await self._async_refresh_activity()
 
+    @override
     async def async_dock(self) -> None:
         """Start docking."""
         LOGGER.debug("Docking mower")
@@ -188,6 +193,7 @@ class AutomowerLawnMower(HusqvarnaAutomowerBleEntity, LawnMowerEntity):
 
         await self._async_refresh_activity()
 
+    @override
     async def async_pause(self) -> None:
         """Pause mower."""
         LOGGER.debug("Pausing mower")
