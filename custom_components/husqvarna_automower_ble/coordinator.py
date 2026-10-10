@@ -173,12 +173,10 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._last_successful_update = datetime.now()
 
             except BleakError as err:
-                LOGGER.error("Error getting data from device")
                 self._consecutive_update_failures += 1
                 self.async_update_listeners()
                 raise UpdateFailed("Error getting data from device") from err
             except Exception as ex:
-                LOGGER.exception("Unexpected error while fetching data: %s", ex)
                 self._consecutive_update_failures += 1
                 self.async_update_listeners()
                 raise UpdateFailed("Unexpected error fetching data") from ex
