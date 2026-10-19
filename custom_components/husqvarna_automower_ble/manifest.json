@@ -7,6 +7,7 @@
       "service_uuid": "98bd0001-0b0e-421a-84e5-ddbf75dc6de4"
     }
   ],
+  "categories": ["garden_plants"],
   "codeowners": ["@Marbanz", "@alistair23"],
   "config_flow": true,
   "dependencies": ["bluetooth_adapters"],
@@ -18,5 +19,5 @@
     "husqvarna-automower-ble==1.7.4",
     "gardena-bluetooth>=2.10.1"
   ],
-  "version": "2.4.2"
+  "version": "2.4.3"
 }
