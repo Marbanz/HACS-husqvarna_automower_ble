@@ -111,8 +111,7 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await super().async_shutdown()
         # Acquire the lock to ensure no operations are in progress during shutdown
         async with self._connection_lock:
-            if self.mower.is_connected():
-                await self.mower.disconnect()
+            await self.mower.disconnect()
 
     async def _async_find_device(self):
         LOGGER.debug("Trying to reconnect")
@@ -182,8 +181,7 @@ class HusqvarnaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 raise UpdateFailed("Unexpected error fetching data") from ex
             finally:
                 # Ensure the mower is disconnected after polling
-                if self.mower.is_connected():
-                    await self.mower.disconnect()
+                await self.mower.disconnect()
 
         return data
 
