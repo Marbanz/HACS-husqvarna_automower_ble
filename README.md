@@ -75,7 +75,7 @@ Some mowers, such as Gardena and other brands that use Husqvarna internal boards
 Refer to your mower's operator manual for the default PIN (`1234`).
 If you have changed the PIN, enter the current PIN instead.
 
-![image](https://github.com/user-attachments/assets/10c75863-a634-4686-bc4c-15bb128dcad9)
+<img width="256" height="395" alt="355475337-10c75863-a634-4686-bc4c-15bb128dcad9" src="https://github.com/user-attachments/assets/5777fb67-2258-409d-8f76-31a01330bb05" />
 
 ---
 
