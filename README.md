@@ -2,7 +2,7 @@
 
 # HACS-husqvarna_automower_ble - Custom integration for Husqvarna Bluetooth automowers
 
-This is a **fork** of the official [Home Assistant Husqvarna Automower BLE integration](https://www.home-assistant.io/integrations/husqvarna_automower_ble/) which was developed by **@alistair23**.
+This is a **fork** of the official [Home Assistant Husqvarna Automower BLE integration](https://www.home-assistant.io/integrations/husqvarna_automower_ble/).
 
 It extends the functionality of the original integration and adds some new features.
 
@@ -21,15 +21,15 @@ It is based on the BLE implementation available at [HusqvarnaAutoMower-BLE](http
 
 ## Installation
 
-### Using HACS
+### Using Marketplace
 
-1. Add this repository to HACS as a custom repository:
-   - Go to **HACS > Integrations**.
+1. Add this repository to the Marketplace as a custom repository:
+   - Go to **Settings > Marketplace**.
    - Click the three dots in the top-right corner and select **Custom Repositories**.
    - Paste the repository URL:  
      `https://github.com/Marbanz/HACS-husqvarna_automower_ble`
    - Choose **Integration** as the category and click **Add**.
-2. Search for **Husqvarna Automower BLE** in HACS and install the integration.
+2. Search for **Husqvarna Automower BLE** in the list and install the integration.
 3. Restart Home Assistant to load the integration.
 
 ---
