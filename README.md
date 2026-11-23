@@ -2,7 +2,7 @@
 
 # HACS-husqvarna_automower_ble - Custom integration for Husqvarna Bluetooth automowers
 
-This is a **fork** of the official [Home Assistant Husqvarna Automower BLE integration](https://www.home-assistant.io/integrations/husqvarna_automower_ble/).
+The code in this repository is based on the official [Home Assistant Husqvarna Automower BLE integration](https://www.home-assistant.io/integrations/husqvarna_automower_ble/) and tries to keep it up to date.
 
 It extends the functionality of the original integration and adds some new features.
 
@@ -21,16 +21,19 @@ It is based on the BLE implementation available at [HusqvarnaAutoMower-BLE](http
 
 ## Installation
 
-### Using Marketplace
+### Using Marketplace (Home Assistant 2026.11 and newer)
 
 1. Add this repository to the Marketplace as a custom repository:
    - Go to **Settings > Marketplace**.
-   - Click the three dots in the top-right corner and select **Custom Repositories**.
+   - Click the three dots in the top-right corner and select **Custom repositories**.
    - Paste the repository URL:  
      `https://github.com/Marbanz/HACS-husqvarna_automower_ble`
    - Choose **Integration** as the category and click **Add**.
-2. Search for **Husqvarna Automower BLE** in the list and install the integration.
+2. Search for **Husqvarna Automower BLE** in the Marketplace and install the integration.
 3. Restart Home Assistant to load the integration.
+
+Home Assistant must have Bluetooth access through a local Bluetooth adapter or a
+supported Bluetooth proxy.
 
 ---
 
@@ -38,22 +41,24 @@ It is based on the BLE implementation available at [HusqvarnaAutoMower-BLE](http
 
 ### Automatic Discovery
 
-1. Your mower may be automatically discovered.
-2. Go to **Settings > Integrations** and look for the **Husqvarna Automower BLE** integration.
-3. Click **Configure** and follow the prompts to set up the mower.
-4. Before submitting, put your mower in pairing mode
+1. Put the mower in Bluetooth pairing mode. On supported models, power the mower
+   off and on again; pairing mode is active for approximately two minutes.
+2. Your mower may be automatically discovered.
+3. Go to **Settings > Integrations** and look for the **Husqvarna Automower BLE** integration.
+4. Click **Configure** and follow the prompts to set up the mower.
+5. Enter the mower PIN when prompted and submit the form.
 
 ### Manual Configuration
 
-1. If the mower is not discovered automatically, you can add it manually:
+1. If the mower is not discovered automatically, put it in Bluetooth pairing mode:
+   - Power off the mower.
+   - Power it back on. Pairing mode is active for approximately two minutes.
+2. If the mower is still not discovered, add it manually:
    - Go to **Settings > Integrations**.
    - Click **Add Integration** and search for **Husqvarna Automower BLE**.
-2. Enter the mower's **MAC address** and **PIN**:
-   - **MAC Address**: If not autodiscovered, retrieve it from the official app or mower settings.
+3. Enter the mower's **MAC address** and **PIN**:
+   - **MAC address**: Retrieve it from the official app or mower settings.
    - **PIN**: See the **PIN Codes** section below for details.
-3. Before submitting:
-   - Power off your mower.
-   - Power it back on to enable Bluetooth pairing mode (active for ~2 minutes).
 4. Click **Submit** to complete the setup.
 
 ---
@@ -68,6 +73,7 @@ Some mowers, such as Gardena and other brands that use Husqvarna internal boards
 - **Park button** = `4`
 
 Refer to your mower's operator manual for the default PIN (`1234`).
+If you have changed the PIN, enter the current PIN instead.
 
 ![image](https://github.com/user-attachments/assets/10c75863-a634-4686-bc4c-15bb128dcad9)
 
@@ -89,14 +95,15 @@ These actions can be performed via the Home Assistant UI.
 
 The integration creates several sensors to monitor the mower's status and performance:
 
-- **Battery Level**: Displays the current battery percentage.
-- **Charging Status**: Indicates whether the mower is charging.
+- **Battery level**: Displays the current battery percentage.
+- **Is charging**: Indicates whether the mower is charging.
 - **Mode**: Shows the current operating mode of the mower.
 - **State**: Displays the mower's current state.
 - **Activity**: Indicates the mower's activity.
-- **Error Code**: Provides error details if the mower encounters an issue.
+- **Error**: Provides error details if the mower encounters an issue.
 - **Next Start Time**: Displays the next scheduled mowing time.
-- **Statistics**: Tracks total runtime, cutting time, charging time, and more.
+- **Statistics**: Tracks total running, cutting, charging, and searching time, as
+  well as collision and charging-cycle counts.
 
 ### Custom Services
 
