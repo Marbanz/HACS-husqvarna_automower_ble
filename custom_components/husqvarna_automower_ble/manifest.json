@@ -8,7 +8,7 @@
     }
   ],
   "categories": ["garden_plants"],
-  "codeowners": ["@Marbanz", "@alistair23"],
+  "codeowners": ["@Marbanz"],
   "config_flow": true,
   "connectivity": ["bluetooth"],
   "dependencies": ["bluetooth_adapters"],
@@ -18,7 +18,7 @@
   "issue_tracker": "https://github.com/Marbanz/HACS-husqvarna_automower_ble/issues",
   "requirements": [
     "husqvarna-automower-ble==1.7.5",
-    "gardena-bluetooth>=2.10.1"
+    "gardena-bluetooth>=3.1.0"
   ],
   "version": "2.4.3"
 }
